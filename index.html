@@ -1913,5 +1913,55 @@
   render();
 })();
 </script>
+<script id="cristart-estoque">
+/* CristART 3D — disponibilidade vinda do sistema de gestão (gestao.cristart3d.com.br).
+   Lê só a "vitrine" pública (sem custos) e mostra "Pronta entrega" ou "Sob encomenda".
+   Se o sistema estiver fora do ar, o site continua igual. */
+(function () {
+  var URL = 'https://tvmbjbyvxslsxcjljzqn.supabase.co/rest/v1/vitrine?select=codigo_site,disponibilidade';
+  var KEY = 'sb_publishable_mC_ajhLQ3FUKPQaXygGg-g_aSPDngij';
+  var mapa = null;
+  var css = document.createElement('style');
+  css.textContent = '.cx-disp{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:700;padding:4px 10px;border-radius:999px;margin:6px 0 4px;width:fit-content;line-height:1.2}' +
+    '.cx-disp::before{content:"";width:7px;height:7px;border-radius:9px;background:currentColor}' +
+    '.cx-pronta{background:#E3F4EA;color:#15803D}.cx-encomenda{background:#EFE8FD;color:#6524D6}' +
+    '[data-theme="dark"] .cx-pronta{background:#12321F;color:#4ADE80}[data-theme="dark"] .cx-encomenda{background:#2A1F45;color:#C4A6FF}';
+  document.head.appendChild(css);
+  function selo(d) {
+    var s = document.createElement('span');
+    s.className = 'cx-disp ' + (d === 'pronta_entrega' ? 'cx-pronta' : 'cx-encomenda');
+    s.textContent = d === 'pronta_entrega' ? 'Pronta entrega' : 'Sob encomenda';
+    return s;
+  }
+  function aplicar() {
+    if (!mapa) return;
+    var cards = document.querySelectorAll('article.card[data-open]');
+    for (var i = 0; i < cards.length; i++) {
+      var c = cards[i];
+      if (c.querySelector('.cx-disp')) continue;
+      var d = mapa[c.getAttribute('data-open')]; if (!d) continue;
+      var preco = c.querySelector('.card-price');
+      if (preco) preco.parentNode.insertBefore(selo(d), preco);
+    }
+    var h = location.hash || '';
+    if (h.indexOf('#/produto/') === 0) {
+      var id = decodeURIComponent(h.slice(10));
+      var info = document.querySelector('.product-info');
+      if (info && mapa[id] && !info.querySelector('.cx-disp')) info.insertBefore(selo(mapa[id]), info.querySelector('.product-price-row'));
+    }
+  }
+  try {
+    fetch(URL, { headers: { apikey: KEY } })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (rows) {
+        mapa = {};
+        (rows || []).forEach(function (r) { if (r.codigo_site) mapa[r.codigo_site] = r.disponibilidade; });
+        aplicar();
+        new MutationObserver(aplicar).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
+      })
+      .catch(function () {});
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>
