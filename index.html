@@ -1910,7 +1910,42 @@
     renderRoute();
   });
   loadCart();
-  render();
+  /* ---------- CATÁLOGO AUTOMÁTICO (sistema de gestão) ----------
+     Os produtos vêm do sistema (gestao.cristart3d.com.br): marcou "Mostrar no site", aparece aqui.
+     Se o sistema estiver fora do ar, o site usa o catálogo guardado nesta página. */
+  var VITRINE = "https://tvmbjbyvxslsxcjljzqn.supabase.co/rest/v1/vitrine?select=*&order=ordem.asc,criado_em.asc";
+  var VKEY = "sb_publishable_mC_ajhLQ3FUKPQaXygGg-g_aSPDngij";
+  function doSistema(r){
+    var id = r.codigo_site || r.id;
+    var links = {};
+    Object.keys(r.links || {}).forEach(function(k){ if(MARKET_META[k]) links[k] = r.links[k]; });
+    return migrateProduct({
+      id: id, name: r.nome, category: r.categoria || "Outros",
+      price: r.preco != null ? Number(r.preco) : 0,
+      cardPrice: r.preco_cartao != null ? Number(r.preco_cartao) : null,
+      originalPrice: r.preco_original != null ? Number(r.preco_original) : null,
+      desc: r.descricao_breve || "", details: r.descricao || "",
+      images: (r.fotos || []).filter(function(u){ return /^https?:\/\//.test(u) || /^data:/.test(u); }),
+      videos: r.videos || [], options: r.opcoes || [], links: links,
+      placeholder: false,
+      featured: !!r.destaque
+    });
+  }
+  var jaRenderizou = false;
+  function primeiraVez(){ if(jaRenderizou) return; jaRenderizou = true; render(); }
+  try{
+    var espera = setTimeout(primeiraVez, 2500);
+    fetch(VITRINE, { headers: { apikey: VKEY } })
+      .then(function(r){ if(!r.ok) throw new Error("vitrine " + r.status); return r.json(); })
+      .then(function(rows){
+        if(!Array.isArray(rows)) throw new Error("vitrine vazia");
+        state.products = rows.map(doSistema);
+        state.products.forEach(function(p){ if(state.categories.indexOf(p.category) === -1) state.categories.push(p.category); });
+        clearTimeout(espera);
+        if(jaRenderizou) render(); else primeiraVez();
+      })
+      .catch(function(){ clearTimeout(espera); primeiraVez(); });
+  }catch(e){ primeiraVez(); }
 })();
 </script>
 <script id="cristart-estoque">
@@ -1918,7 +1953,7 @@
    Lê só a "vitrine" pública (sem custos) e mostra "Pronta entrega" ou "Sob encomenda".
    Se o sistema estiver fora do ar, o site continua igual. */
 (function () {
-  var URL = 'https://tvmbjbyvxslsxcjljzqn.supabase.co/rest/v1/vitrine?select=codigo_site,disponibilidade';
+  var URL = 'https://tvmbjbyvxslsxcjljzqn.supabase.co/rest/v1/vitrine?select=id,codigo_site,disponibilidade';
   var KEY = 'sb_publishable_mC_ajhLQ3FUKPQaXygGg-g_aSPDngij';
   var mapa = null;
   var css = document.createElement('style');
@@ -1955,7 +1990,7 @@
       .then(function (r) { return r.ok ? r.json() : []; })
       .then(function (rows) {
         mapa = {};
-        (rows || []).forEach(function (r) { if (r.codigo_site) mapa[r.codigo_site] = r.disponibilidade; });
+        (rows || []).forEach(function (r) { mapa[r.codigo_site || r.id] = r.disponibilidade; });
         aplicar();
         new MutationObserver(aplicar).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
       })
