@@ -255,6 +255,10 @@
   .gallery-thumbs button{width:60px; height:60px; border-radius:8px; overflow:hidden; padding:0; border:2px solid transparent; cursor:pointer; background:var(--surface-2);}
   .gallery-thumbs button.active{border-color:var(--craft);}
   .gallery-thumbs img{width:100%; height:100%; object-fit:cover;}
+  .gallery-thumbs .thumb-video{position:relative; background:#222;}
+  .gallery-thumbs .thumb-video img{filter:brightness(.55);}
+  .gallery-thumbs .thumb-video .play{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px; text-shadow:0 1px 4px rgba(0,0,0,.6);}
+  .gallery-main .gallery-video{width:100%; height:100%; border:0; background:#000; cursor:default;}
 
   /* lightbox */
   .lightbox-overlay{position:fixed; inset:0; background:rgba(5,4,6,.92); z-index:150; display:flex; align-items:center; justify-content:center; padding:20px;}
@@ -758,6 +762,13 @@
     return "outro";
   }
   var PLATFORM_LABELS = { youtube:"YouTube", instagram:"Instagram", tiktok:"TikTok", outro:"Vídeo" };
+  function videoEmbedUrl(url){
+    var m;
+    if(/youtu\.?be/i.test(url)) return youtubeEmbedUrl(url);
+    if((m = url.match(/instagram\.com\/(?:[^\/]+\/)?(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/i))) return "https://www.instagram.com/" + (m[1].toLowerCase()==="p" ? "p" : "reel") + "/" + m[2] + "/embed/";
+    if((m = url.match(/tiktok\.com\/.*\/video\/(\d+)/i))) return "https://www.tiktok.com/embed/v2/" + m[1];
+    return null;
+  }
   function youtubeEmbedUrl(url){
     var m = url.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);
     return m ? ("https://www.youtube.com/embed/" + m[1]) : null;
@@ -1050,6 +1061,11 @@
     return '<a class="video-link" href="'+escapeHtml(v.url)+'" target="_blank" rel="noopener">Assistir no '+PLATFORM_LABELS[platform]+' ↗</a>';
   }
 
+  function videoFrameHtml(v){
+    var src = videoEmbedUrl(v.url);
+    return '<iframe class="gallery-video" src="'+escapeHtml(src)+'" title="Vídeo do produto" allow="autoplay; encrypted-media; picture-in-picture; clipboard-write" allowfullscreen loading="lazy" scrolling="no"></iframe>';
+  }
+
   function relatedProducts(p){
     var sameCat = state.products.filter(function(x){ return x.id !== p.id && x.category === p.category; });
     var others = state.products.filter(function(x){ return x.id !== p.id && x.category !== p.category; });
@@ -1079,6 +1095,8 @@
     selectedOptions = {};
     (p.options||[]).forEach(function(g){ if(g.choices && g.choices.length) selectedOptions[g.name] = g.choices[0]; });
     var images = (p.images && p.images.length) ? p.images : [];
+    var vids = (p.videos || []).map(function(v){ return typeof v === "string" ? { url: v } : v; }).filter(function(v){ return v && /^https?:\/\//.test(v.url); });
+    var mostrandoVideo = !images.length && vids.length > 0;
     var altPrice = installmentLabelFull(p);
     var disc = discountPercent(p);
     var links = "";
@@ -1104,9 +1122,12 @@
           '<div>' +
             '<div class="product-layout">' +
               '<div>' +
-                '<div class="gallery-main" id="gallery-main">'+(images[0] ? '<img src="'+images[0]+'" alt="'+escapeHtml(p.name)+'">' : iconFor(p.category))+'</div>' +
-                (images.length>1 ? '<div class="gallery-thumbs" id="gallery-thumbs">'+images.map(function(src,i){
+                '<div class="gallery-main" id="gallery-main"'+(!images[0] && vids[0] && videoEmbedUrl(vids[0].url) ? ' style="aspect-ratio:9/15;max-width:440px"' : '')+'>'+(images[0] ? '<img src="'+images[0]+'" alt="'+escapeHtml(p.name)+'">' : (vids[0] && videoEmbedUrl(vids[0].url) ? videoFrameHtml(vids[0]) : iconFor(p.category)))+'</div>' +
+                ((images.length + vids.length)>1 ? '<div class="gallery-thumbs" id="gallery-thumbs">'+images.map(function(src,i){
                   return '<button type="button" data-idx="'+i+'" class="'+(i===0?'active':'')+'"><img src="'+src+'" alt=""></button>';
+                }).join("")+vids.map(function(v,i){
+                  var pl = detectPlatform(v.url);
+                  return '<button type="button" data-vid="'+i+'" class="thumb-video" title="Vídeo no '+PLATFORM_LABELS[pl]+'" aria-label="Ver vídeo no '+PLATFORM_LABELS[pl]+'">'+(images[0] ? '<img src="'+images[0]+'" alt="">' : '')+'<span class="play">▶</span></button>';
                 }).join("")+'</div>' : '') +
                 '<div class="product-desc-box"><h4>Descrição do produto</h4><p class="product-desc">'+escapeHtml(p.details || p.desc || "")+'</p></div>' +
               '</div>' +
@@ -1123,7 +1144,7 @@
                   '<button type="button" class="btn btn-primary" id="pq-add">Adicionar ao carrinho</button>' +
                 '</div>' +
                 (links ? '<div class="card-links" style="margin-block:10px;">'+links+'</div>' : '') +
-                (p.videos && p.videos.length ? '<div class="divider"></div><h4 style="font-family:\'IBM Plex Mono\'; font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); margin-bottom:4px;">Vídeos</h4><div class="video-list">'+p.videos.map(videoBlockHtml).join("")+'</div>' : '') +
+                (vids.length ? '<div class="divider"></div><div class="video-list">'+vids.map(function(v){ var pl = detectPlatform(v.url); return '<a class="video-link" href="'+escapeHtml(v.url)+'" target="_blank" rel="noopener">▶ Ver o vídeo no '+PLATFORM_LABELS[pl]+' ↗</a>'; }).join("")+'</div>' : '') +
               '</div>' +
             '</div>' +
             (related.length ? (
@@ -1158,15 +1179,26 @@
 
     var galleryMainEl = document.getElementById("gallery-main");
     if(galleryMainEl && images.length){
-      galleryMainEl.addEventListener("click", function(){ openLightbox(images, galleryIndex); });
+      galleryMainEl.addEventListener("click", function(){ if(!mostrandoVideo) openLightbox(images, galleryIndex); });
     }
 
     var thumbs = document.getElementById("gallery-thumbs");
     if(thumbs){
+      Array.prototype.forEach.call(thumbs.querySelectorAll("[data-vid]"), function(btn){
+        btn.addEventListener("click", function(){
+          var v = vids[Number(btn.getAttribute("data-vid"))];
+          if(!videoEmbedUrl(v.url)){ window.open(v.url, "_blank", "noopener"); return; }
+          mostrandoVideo = true;
+          var gm = document.getElementById("gallery-main"); gm.innerHTML = videoFrameHtml(v); gm.style.aspectRatio = "9/15"; gm.style.maxWidth = "440px";
+          Array.prototype.forEach.call(thumbs.querySelectorAll("button"), function(b){ b.classList.remove("active"); });
+          btn.classList.add("active");
+        });
+      });
       Array.prototype.forEach.call(thumbs.querySelectorAll("[data-idx]"), function(btn){
         btn.addEventListener("click", function(){
           var idx = Number(btn.getAttribute("data-idx"));
-          galleryIndex = idx;
+          galleryIndex = idx; mostrandoVideo = false;
+          var gm2 = document.getElementById("gallery-main"); gm2.style.aspectRatio = ""; gm2.style.maxWidth = "";
           document.getElementById("gallery-main").innerHTML = '<img src="'+images[idx]+'" alt="'+escapeHtml(p.name)+'">';
           Array.prototype.forEach.call(thumbs.querySelectorAll("button"), function(b){ b.classList.remove("active"); });
           btn.classList.add("active");
