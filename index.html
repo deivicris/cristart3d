@@ -256,6 +256,15 @@
   .gallery-thumbs button.active{border-color:var(--craft);}
   .gallery-thumbs img{width:100%; height:100%; object-fit:cover;}
   .gallery-thumbs .thumb-video{position:relative; background:#222;}
+  .atacado-tab{margin:12px 0 4px; border:1.5px solid var(--craft); border-radius:14px; padding:12px 14px; background:color-mix(in srgb, var(--craft) 7%, transparent);}
+  .at-titulo{font-weight:800; margin-bottom:8px;}
+  .at-linha{display:flex; justify-content:space-between; gap:10px; padding:5px 0; border-top:1px dashed var(--line); font-size:.92rem;}
+  .at-linha:first-of-type{border-top:0;}
+  .at-linha em{font-style:normal; font-weight:800; color:#15803D; margin-left:4px;}
+  .at-nota{font-size:.78rem; color:var(--ink-faint); margin-top:6px;}
+  .at-selo{display:inline-block; font-size:.76rem; font-weight:700; color:#15803D; margin-top:4px;}
+  .at-tag{color:#15803D;}
+  .at-prox{display:block; font-size:.8rem; color:var(--craft); margin-top:2px;}
   .gallery-thumbs .thumb-video img{filter:brightness(.55);}
   .gallery-thumbs .thumb-video .play{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px; text-shadow:0 1px 4px rgba(0,0,0,.6);}
   .gallery-main .gallery-video{width:100%; height:100%; border:0; background:#000; cursor:default;}
@@ -603,6 +612,14 @@
 
   function round2(n){ return Math.round((Number(n)||0) * 100) / 100; }
 
+  function faixasDe(p){ return (p && Array.isArray(p.atacado) ? p.atacado : []).filter(function(f){ return f && f.min > 1 && Number(f.preco) > 0; }).sort(function(a,b){ return a.min - b.min; }); }
+  function faixaPara(p, qtd){ var r = null; faixasDe(p).forEach(function(f){ if(qtd >= f.min) r = f; }); return r; }
+  function qtdNoCarrinho(id){ var n = 0; cart.forEach(function(l){ if(l.productId === id) n += l.qty; }); return n; }
+  function precoPorQtd(p, method, qtd){
+    var base = priceForMethod(p, method), f = faixaPara(p, qtd || 1);
+    if(!f || !Number(p.price)) return base;
+    return round2(base * (Number(f.preco) / Number(p.price)));
+  }
   function priceForMethod(p, method){
     if(method === "cartao"){
       if(p.cardPrice != null && p.cardPrice !== "" && !isNaN(p.cardPrice)) return Number(p.cardPrice);
@@ -668,7 +685,7 @@
 
   function cartSubtotal(method){
     var total = 0;
-    cartLines().forEach(function(l){ total += priceForMethod(l.product, method) * l.qty; });
+    cartLines().forEach(function(l){ total += precoPorQtd(l.product, method, qtdNoCarrinho(l.product.id)) * l.qty; });
     return round2(total);
   }
 
@@ -982,7 +999,7 @@
     var chipsWrap = document.getElementById("category-chips");
     var sidebar = document.getElementById("cat-sidebar");
     if(!chipsWrap || !sidebar) return;
-    var cats = ["Todos"].concat(currentCategories());
+    var cats = ["Todos"].concat(state.products.some(function(p){ return faixasDe(p).length; }) ? ["💰 Atacado"] : []).concat(currentCategories());
 
     chipsWrap.innerHTML = cats.map(function(c){
       return '<button type="button" class="chip" data-cat="'+escapeHtml(c)+'" aria-pressed="'+(c===activeCategory)+'">'+escapeHtml(c)+'</button>';
@@ -1028,6 +1045,7 @@
           (disc !== null ? '<div class="price-was-row"><span class="price-was mono">'+fmtPrice(p.originalPrice)+'</span><span class="price-badge">'+disc+'%</span></div>' : '') +
           '<span class="card-price mono">'+fmtPrice(p.price)+' <span style="color:var(--ink-faint); font-weight:400; font-size:.78rem;">no Pix</span></span>' +
           (altPrice ? '<span class="card-price-alt">'+altPrice+'</span>' : '') +
+          (faixasDe(p).length ? '<span class="at-selo">💰 Atacado a partir de '+fmtPrice(Math.min.apply(null, faixasDe(p).map(function(f){ return Number(f.preco); })))+'</span>' : '') +
           '<div class="card-actions"><button type="button" class="btn btn-primary btn-sm" data-add="'+p.id+'">Adicionar ao carrinho</button></div>' +
         '</div>' +
       '</article>'
@@ -1038,7 +1056,7 @@
     var grid = document.getElementById("catalog-grid");
     if(!grid) return;
     var list = state.products.filter(function(p){
-      return activeCategory === "Todos" || p.category === activeCategory;
+      return activeCategory === "Todos" || p.category === activeCategory || (activeCategory === "💰 Atacado" && faixasDe(p).length);
     });
     if(!list.length){
       grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">Nenhum produto nessa categoria ainda.</div>';
@@ -1138,6 +1156,7 @@
                 (disc !== null ? '<div class="price-was-row" style="margin-block:8px 0;"><span class="price-was mono">'+fmtPrice(p.originalPrice)+'</span><span class="price-badge">'+disc+'%</span></div>' : '') +
                 '<div class="product-price-row"><span class="price-main mono">'+fmtPrice(p.price)+'</span><span style="color:var(--ink-faint);font-size:.85rem;">no Pix</span></div>' +
                 (altPrice ? '<div class="price-alt mono">'+altPrice+'</div>' : '') +
+                tabelaAtacadoHtml(p) +
                 optionsHtml +
                 '<div class="qty-row">' +
                   '<div class="qty-stepper"><button type="button" id="pq-down">&minus;</button><span id="pq-val">1</span><button type="button" id="pq-up">+</button></div>' +
@@ -1285,7 +1304,8 @@
     var msg = "Pedido CristART 3D\n\n";
     lines.forEach(function(l){
       var optsText = optionsSummary(l.options);
-      msg += l.qty + "x " + l.product.name + (optsText ? " ("+optsText+")" : "") + " - " + fmtPrice(priceForMethod(l.product, "pix") * l.qty) + "\n";
+      var qp = qtdNoCarrinho(l.product.id), fx = faixaPara(l.product, qp), un = precoPorQtd(l.product, "pix", qp);
+      msg += l.qty + "x " + l.product.name + (optsText ? " ("+optsText+")" : "") + " - " + fmtPrice(un) + " cada = " + fmtPrice(un * l.qty) + (fx ? " (atacado " + fx.min + "+)" : "") + "\n";
     });
     payment = payment || { method:"pix" };
     if(payment.method === "cartao" && payment.n >= 2){
@@ -1302,6 +1322,19 @@
     return msg;
   }
 
+  function avisoProxFaixa(p){
+    var q = qtdNoCarrinho(p.id), prox = faixasDe(p).filter(function(f){ return f.min > q; })[0];
+    if(!prox) return "";
+    return '<span class="at-prox">Faltam <b>'+(prox.min - q)+'</b> para pagar <b>'+fmtPrice(Number(prox.preco))+'</b> cada'+(p.options && p.options.length ? ' (pode misturar as opções)' : '')+'</span>';
+  }
+  function tabelaAtacadoHtml(p){
+    var fx = faixasDe(p); if(!fx.length) return "";
+    var linhas = [{ de:1, ate: fx[0].min - 1, preco: Number(p.price) }].concat(fx.map(function(f, i){ return { de: f.min, ate: fx[i+1] ? fx[i+1].min - 1 : null, preco: Number(f.preco) }; }));
+    return '<div class="atacado-tab"><div class="at-titulo">💰 Quanto mais, mais barato</div>' + linhas.map(function(l, i){
+      var pct = i ? Math.round((1 - l.preco / Number(p.price)) * 100) : 0;
+      return '<div class="at-linha'+(i ? ' at-desc' : '')+'"><span>'+(l.ate ? l.de+' a '+l.ate : l.de+' ou mais')+' un.</span><span><b class="mono">'+fmtPrice(l.preco)+'</b> cada'+(pct > 0 ? ' <em>−'+pct+'%</em>' : '')+'</span></div>';
+    }).join("") + '<div class="at-nota">No Pix. O desconto vale no carrinho automaticamente'+(p.options && p.options.length ? ', somando as opções que você escolher' : '')+'.</div></div>';
+  }
   function renderCartPage(){
     var main = document.getElementById("route-main");
     var lines = cartLines();
@@ -1322,15 +1355,17 @@
       return '<option value="'+o.n+'"'+sel+'>'+o.n+'x de '+fmtPrice(o.value)+' sem juros</option>';
     }).join("");
 
+    var jaAvisou = {};
     var itemsHtml = lines.map(function(l){
       var p = l.product;
+      var aviso = jaAvisou[p.id] ? "" : avisoProxFaixa(p); jaAvisou[p.id] = true;
       var img = (p.images && p.images[0]) ? '<img src="'+p.images[0]+'" alt="">' : iconFor(p.category);
       var optsText = optionsSummary(l.options);
       var key = escapeHtml(l.lineKey);
       return (
         '<div class="cart-item" data-open="'+p.id+'">' +
           '<div class="thumb">'+img+'</div>' +
-          '<div class="info"><b>'+escapeHtml(p.name)+'</b>' + (optsText ? '<span style="display:block;color:var(--ink-faint);">'+escapeHtml(optsText)+'</span>' : '') + '<span>'+fmtPrice(priceForMethod(p, "pix"))+' cada (Pix)</span></div>' +
+          '<div class="info"><b>'+escapeHtml(p.name)+'</b>' + (optsText ? '<span style="display:block;color:var(--ink-faint);">'+escapeHtml(optsText)+'</span>' : '') + '<span>'+fmtPrice(precoPorQtd(p, "pix", qtdNoCarrinho(p.id)))+' cada (Pix)'+(faixaPara(p, qtdNoCarrinho(p.id)) ? ' <b class="at-tag">preço de atacado</b>' : '')+'</span>'+aviso+'</div>' +
           '<div class="qty-stepper" onclick="event.stopPropagation()">' +
             '<button type="button" data-qty-down="'+key+'">&minus;</button>' +
             '<span>'+l.qty+'</span>' +
@@ -1960,7 +1995,8 @@
       images: (r.fotos || []).filter(function(u){ return /^https?:\/\//.test(u) || /^data:/.test(u); }),
       videos: r.videos || [], options: r.opcoes || [], links: links,
       placeholder: false,
-      featured: !!r.destaque
+      featured: !!r.destaque,
+      atacado: Array.isArray(r.atacado) ? r.atacado.map(function(f){ return { min: Number(f.min), preco: Number(f.preco) }; }) : []
     });
   }
   var jaRenderizou = false;
