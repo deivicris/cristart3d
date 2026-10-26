@@ -268,6 +268,8 @@
   .gallery-thumbs .thumb-video img{filter:brightness(.55);}
   .gallery-thumbs .thumb-video .play{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px; text-shadow:0 1px 4px rgba(0,0,0,.6);}
   .gallery-main .gallery-video{width:100%; height:100%; border:0; background:#000; cursor:default;}
+  .gallery-main video.gallery-video{object-fit:contain;}
+  .gallery-thumbs .thumb-video video{width:100%; height:100%; object-fit:cover; filter:brightness(.6); pointer-events:none;}
 
   /* lightbox */
   .lightbox-overlay{position:fixed; inset:0; background:rgba(5,4,6,.92); z-index:150; display:flex; align-items:center; justify-content:center; padding:20px;}
@@ -773,14 +775,17 @@
   }
 
   function detectPlatform(url){
+    if(/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url || "")) return "arquivo";
     if(/youtu\.?be/i.test(url)) return "youtube";
     if(/instagram\.com/i.test(url)) return "instagram";
     if(/tiktok\.com/i.test(url)) return "tiktok";
     return "outro";
   }
-  var PLATFORM_LABELS = { youtube:"YouTube", instagram:"Instagram", tiktok:"TikTok", outro:"Vídeo" };
+  var PLATFORM_LABELS = { youtube:"YouTube", instagram:"Instagram", tiktok:"TikTok", arquivo:"vídeo", outro:"Vídeo" };
+  function ehArquivoVideo(url){ return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url || ""); }
   function videoEmbedUrl(url){
     var m;
+    if(ehArquivoVideo(url)) return url;
     if(/youtu\.?be/i.test(url)) return youtubeEmbedUrl(url);
     if((m = url.match(/instagram\.com\/(?:[^\/]+\/)?(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/i))) return "https://www.instagram.com/" + (m[1].toLowerCase()==="p" ? "p" : "reel") + "/" + m[2] + "/embed/";
     if((m = url.match(/tiktok\.com\/.*\/video\/(\d+)/i))) return "https://www.tiktok.com/embed/v2/" + m[1];
@@ -1081,6 +1086,7 @@
 
   function videoFrameHtml(v){
     var src = videoEmbedUrl(v.url);
+    if(ehArquivoVideo(v.url)) return '<video class="gallery-video" src="'+escapeHtml(src)+'" controls playsinline autoplay muted loop preload="metadata"></video>';
     return '<iframe class="gallery-video" src="'+escapeHtml(src)+'" title="Vídeo do produto" allow="autoplay; encrypted-media; picture-in-picture; clipboard-write" allowfullscreen loading="lazy" scrolling="no"></iframe>';
   }
 
@@ -1140,12 +1146,12 @@
           '<div>' +
             '<div class="product-layout">' +
               '<div>' +
-                '<div class="gallery-main" id="gallery-main"'+(!images[0] && vids[0] && videoEmbedUrl(vids[0].url) ? ' style="aspect-ratio:9/15;max-width:440px"' : '')+'>'+(images[0] ? '<img src="'+images[0]+'" alt="'+escapeHtml(p.name)+'">' : (vids[0] && videoEmbedUrl(vids[0].url) ? videoFrameHtml(vids[0]) : iconFor(p.category)))+'</div>' +
+                '<div class="gallery-main" id="gallery-main"'+(!images[0] && vids[0] && videoEmbedUrl(vids[0].url) && !ehArquivoVideo(vids[0].url) ? ' style="aspect-ratio:9/15;max-width:440px"' : '')+'>'+(images[0] ? '<img src="'+images[0]+'" alt="'+escapeHtml(p.name)+'">' : (vids[0] && videoEmbedUrl(vids[0].url) ? videoFrameHtml(vids[0]) : iconFor(p.category)))+'</div>' +
                 ((images.length + vids.length)>1 ? '<div class="gallery-thumbs" id="gallery-thumbs">'+images.map(function(src,i){
                   return '<button type="button" data-idx="'+i+'" class="'+(i===0?'active':'')+'"><img src="'+src+'" alt=""></button>';
                 }).join("")+vids.map(function(v,i){
                   var pl = detectPlatform(v.url);
-                  return '<button type="button" data-vid="'+i+'" class="thumb-video" title="Vídeo no '+PLATFORM_LABELS[pl]+'" aria-label="Ver vídeo no '+PLATFORM_LABELS[pl]+'">'+(images[0] ? '<img src="'+images[0]+'" alt="">' : '')+'<span class="play">▶</span></button>';
+                  return '<button type="button" data-vid="'+i+'" class="thumb-video" title="'+(pl === "arquivo" ? "Vídeo" : "Vídeo no "+PLATFORM_LABELS[pl])+'" aria-label="Ver vídeo">'+(images[0] ? '<img src="'+images[0]+'" alt="">' : '')+'<span class="play">▶</span></button>';
                 }).join("")+'</div>' : '') +
                 '<div class="product-desc-box"><h4>Descrição do produto</h4><p class="product-desc">'+escapeHtml(p.details || p.desc || "")+'</p></div>' +
               '</div>' +
@@ -1163,7 +1169,7 @@
                   '<button type="button" class="btn btn-primary" id="pq-add">Adicionar ao carrinho</button>' +
                 '</div>' +
                 (links ? '<div class="card-links" style="margin-block:10px;">'+links+'</div>' : '') +
-                (vids.length ? '<div class="divider"></div><div class="video-list">'+vids.map(function(v){ var pl = detectPlatform(v.url); return '<a class="video-link" href="'+escapeHtml(v.url)+'" target="_blank" rel="noopener">▶ Ver o vídeo no '+PLATFORM_LABELS[pl]+' ↗</a>'; }).join("")+'</div>' : '') +
+                (vids.filter(function(v){ return !ehArquivoVideo(v.url); }).length ? '<div class="divider"></div><div class="video-list">'+vids.filter(function(v){ return !ehArquivoVideo(v.url); }).map(function(v){ var pl = detectPlatform(v.url); return '<a class="video-link" href="'+escapeHtml(v.url)+'" target="_blank" rel="noopener">▶ Ver o vídeo no '+PLATFORM_LABELS[pl]+' ↗</a>'; }).join("")+'</div>' : '') +
               '</div>' +
             '</div>' +
             (related.length ? (
@@ -1208,7 +1214,7 @@
           var v = vids[Number(btn.getAttribute("data-vid"))];
           if(!videoEmbedUrl(v.url)){ window.open(v.url, "_blank", "noopener"); return; }
           mostrandoVideo = true;
-          var gm = document.getElementById("gallery-main"); gm.innerHTML = videoFrameHtml(v); gm.style.aspectRatio = "9/15"; gm.style.maxWidth = "440px";
+          var gm = document.getElementById("gallery-main"); gm.innerHTML = videoFrameHtml(v); if(!ehArquivoVideo(v.url)){ gm.style.aspectRatio = "9/15"; gm.style.maxWidth = "440px"; } else { gm.style.aspectRatio = ""; gm.style.maxWidth = ""; }
           Array.prototype.forEach.call(thumbs.querySelectorAll("button"), function(b){ b.classList.remove("active"); });
           btn.classList.add("active");
         });
