@@ -1169,7 +1169,7 @@
                 (disc !== null ? '<div class="price-was-row" style="margin-block:8px 0;"><span class="price-was mono">'+fmtPrice(p.originalPrice)+'</span><span class="price-badge">'+disc+'%</span></div>' : '') +
                 '<div class="product-price-row"><span class="price-main mono" id="pp-preco">'+fmtPrice(p.price + extraDe(p, selectedOptions))+'</span><span style="color:var(--ink-faint);font-size:.85rem;">no Pix</span></div>' +
                 (altPrice ? '<div class="price-alt mono">'+altPrice+'</div>' : '') +
-                tabelaAtacadoHtml(p) +
+                tabelaAtacadoHtml(p, selectedOptions) +
                 optionsHtml +
                 '<div class="qty-row">' +
                   '<div class="qty-stepper"><button type="button" id="pq-down">&minus;</button><span id="pq-val">1</span><button type="button" id="pq-up">+</button></div>' +
@@ -1208,6 +1208,8 @@
         });
         var ppEl = document.getElementById("pp-preco");
         if(ppEl) ppEl.textContent = fmtPrice(precoPorQtd(p, "pix", 1, selectedOptions));
+        var atEl = main.querySelector(".product-info .atacado-tab");
+        if(atEl) atEl.outerHTML = tabelaAtacadoHtml(p, selectedOptions);
         var altEl = main.querySelector(".product-info .price-alt");
         if(altEl){ var ex2 = extraDe(p, selectedOptions), p2 = Object.assign({}, p, { price: Number(p.price) + ex2, cardPrice: p.cardPrice != null && p.cardPrice !== "" ? round2(Number(p.cardPrice) * (Number(p.price) + ex2) / Number(p.price)) : null }); altEl.textContent = installmentLabelFull(p2); }
       });
@@ -1344,11 +1346,12 @@
     if(!prox) return "";
     return '<span class="at-prox">Faltam <b>'+(prox.min - q)+'</b> para pagar <b>'+fmtPrice(Number(prox.preco))+'</b> cada'+(p.options && p.options.length ? ' (pode misturar as opções)' : '')+'</span>';
   }
-  function tabelaAtacadoHtml(p){
+  function tabelaAtacadoHtml(p, options){
     var fx = faixasDe(p); if(!fx.length) return "";
-    var linhas = [{ de:1, ate: fx[0].min - 1, preco: Number(p.price) }].concat(fx.map(function(f, i){ return { de: f.min, ate: fx[i+1] ? fx[i+1].min - 1 : null, preco: Number(f.preco) }; }));
+    var linhas = [{ de:1, ate: fx[0].min - 1 }].concat(fx.map(function(f, i){ return { de: f.min, ate: fx[i+1] ? fx[i+1].min - 1 : null }; }));
+    linhas.forEach(function(l){ l.preco = precoPorQtd(p, "pix", l.de, options); });
     return '<div class="atacado-tab"><div class="at-titulo">💰 Quanto mais, mais barato</div>' + linhas.map(function(l, i){
-      var pct = i ? Math.round((1 - l.preco / Number(p.price)) * 100) : 0;
+      var pct = i ? Math.round((1 - l.preco / linhas[0].preco) * 100) : 0;
       return '<div class="at-linha'+(i ? ' at-desc' : '')+'"><span>'+(l.ate ? l.de+' a '+l.ate : l.de+' ou mais')+' un.</span><span><b class="mono">'+fmtPrice(l.preco)+'</b> cada'+(pct > 0 ? ' <em>−'+pct+'%</em>' : '')+'</span></div>';
     }).join("") + '<div class="at-nota">No Pix. O desconto vale no carrinho automaticamente'+(p.options && p.options.length ? ', somando as opções que você escolher' : '')+'.'+((p.options||[]).some(function(g){ return g.extras && Object.keys(g.extras).length; }) ? '' : '')+'</div></div>';
   }
