@@ -939,9 +939,10 @@
   function currentCategories(){
     var set = {};
     state.categories.forEach(function(c){ set[c]=true; });
-    state.products.forEach(function(p){ if(p.category) set[p.category]=true; });
+    state.products.forEach(function(p){ catsDe(p).forEach(function(c){ set[c]=true; }); });
     return Object.keys(set);
   }
+  function catsDe(p){ var l = p.category ? [p.category] : []; (p.extraCats||[]).forEach(function(c){ if(c && l.indexOf(c) < 0) l.push(c); }); return l; }
 
   function renderHomePage(){
     var main = document.getElementById("route-main");
@@ -1068,7 +1069,7 @@
     var grid = document.getElementById("catalog-grid");
     if(!grid) return;
     var list = state.products.filter(function(p){
-      return activeCategory === "Todos" || p.category === activeCategory || (activeCategory === "💰 Atacado" && faixasDe(p).length);
+      return activeCategory === "Todos" || catsDe(p).indexOf(activeCategory) >= 0 || (activeCategory === "💰 Atacado" && faixasDe(p).length);
     });
     if(!list.length){
       grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;">Nenhum produto nessa categoria ainda.</div>';
@@ -1098,8 +1099,9 @@
   }
 
   function relatedProducts(p){
-    var sameCat = state.products.filter(function(x){ return x.id !== p.id && x.category === p.category; });
-    var others = state.products.filter(function(x){ return x.id !== p.id && x.category !== p.category; });
+    var minhas = catsDe(p), mesma = function(x){ return catsDe(x).some(function(c){ return minhas.indexOf(c) >= 0; }); };
+    var sameCat = state.products.filter(function(x){ return x.id !== p.id && mesma(x); });
+    var others = state.products.filter(function(x){ return x.id !== p.id && !mesma(x); });
     return sameCat.concat(others).slice(0,4);
   }
 
@@ -2007,7 +2009,7 @@
     var links = {};
     Object.keys(r.links || {}).forEach(function(k){ if(MARKET_META[k]) links[k] = r.links[k]; });
     return migrateProduct({
-      id: id, name: r.nome, category: r.categoria || "Outros",
+      id: id, name: r.nome, category: r.categoria || "Outros", extraCats: Array.isArray(r.categorias_extra) ? r.categorias_extra : [],
       price: r.preco != null ? Number(r.preco) : 0,
       cardPrice: r.preco_cartao != null ? Number(r.preco_cartao) : null,
       originalPrice: r.preco_original != null ? Number(r.preco_original) : null,
@@ -2028,7 +2030,7 @@
       .then(function(rows){
         if(!Array.isArray(rows)) throw new Error("vitrine vazia");
         state.products = rows.map(doSistema);
-        state.products.forEach(function(p){ if(state.categories.indexOf(p.category) === -1) state.categories.push(p.category); });
+        state.products.forEach(function(p){ catsDe(p).forEach(function(c){ if(state.categories.indexOf(c) === -1) state.categories.push(c); }); });
         clearTimeout(espera);
         if(jaRenderizou) render(); else primeiraVez();
       })
