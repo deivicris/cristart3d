@@ -1139,8 +1139,7 @@
       return '<div class="opt-group">' +
         '<span class="opt-group-label">'+escapeHtml(g.name)+'</span>' +
         '<div class="opt-choices">' + g.choices.map(function(c, ci){
-          var ex = g.extras && Number(g.extras[c]);
-          return '<button type="button" class="opt-choice" data-group-idx="'+gi+'" data-choice-idx="'+ci+'" aria-pressed="'+(ci===0 ? "true" : "false")+'">'+escapeHtml(c)+(ex ? ' <small class="opt-extra">'+(ex > 0 ? '+ ' : '− ')+fmtPrice(Math.abs(ex))+'</small>' : '')+'</button>';
+          return '<button type="button" class="opt-choice" data-group-idx="'+gi+'" data-choice-idx="'+ci+'" aria-pressed="'+(ci===0 ? "true" : "false")+'">'+escapeHtml(c)+'</button>';
         }).join("") + '</div>' +
       '</div>';
     }).join("") : "";
@@ -1351,7 +1350,7 @@
     return '<div class="atacado-tab"><div class="at-titulo">💰 Quanto mais, mais barato</div>' + linhas.map(function(l, i){
       var pct = i ? Math.round((1 - l.preco / Number(p.price)) * 100) : 0;
       return '<div class="at-linha'+(i ? ' at-desc' : '')+'"><span>'+(l.ate ? l.de+' a '+l.ate : l.de+' ou mais')+' un.</span><span><b class="mono">'+fmtPrice(l.preco)+'</b> cada'+(pct > 0 ? ' <em>−'+pct+'%</em>' : '')+'</span></div>';
-    }).join("") + '<div class="at-nota">No Pix. O desconto vale no carrinho automaticamente'+(p.options && p.options.length ? ', somando as opções que você escolher' : '')+'.'+((p.options||[]).some(function(g){ return g.extras && Object.keys(g.extras).length; }) ? ' Opções com valor a mais têm o mesmo desconto.' : '')+'</div></div>';
+    }).join("") + '<div class="at-nota">No Pix. O desconto vale no carrinho automaticamente'+(p.options && p.options.length ? ', somando as opções que você escolher' : '')+'.'+((p.options||[]).some(function(g){ return g.extras && Object.keys(g.extras).length; }) ? '' : '')+'</div></div>';
   }
   function renderCartPage(){
     var main = document.getElementById("route-main");
