@@ -296,6 +296,7 @@
   .opt-choices{display:flex; gap:8px; flex-wrap:wrap;}
   .opt-choice{font-family:'Manrope'; font-weight:600; font-size:.88rem; padding:9px 16px; border-radius:10px; border:1px solid var(--line-strong); background:var(--surface); color:var(--ink); cursor:pointer;}
   .opt-choice:hover{border-color:var(--craft);}
+  .opt-extra{font-weight:700; color:var(--craft); margin-left:4px; font-size:.78rem;}
   .opt-choice[aria-pressed="true"]{border-color:var(--craft); box-shadow:0 0 0 1px var(--craft); background:color-mix(in srgb, var(--craft) 14%, var(--surface));}
   .qty-row{display:flex; align-items:center; gap:14px; margin-block:18px;}
   .qty-stepper{display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono'; border:1px solid var(--line-strong); border-radius:999px; padding:4px;}
@@ -617,10 +618,16 @@
   function faixasDe(p){ return (p && Array.isArray(p.atacado) ? p.atacado : []).filter(function(f){ return f && f.min > 1 && Number(f.preco) > 0; }).sort(function(a,b){ return a.min - b.min; }); }
   function faixaPara(p, qtd){ var r = null; faixasDe(p).forEach(function(f){ if(qtd >= f.min) r = f; }); return r; }
   function qtdNoCarrinho(id){ var n = 0; cart.forEach(function(l){ if(l.productId === id) n += l.qty; }); return n; }
-  function precoPorQtd(p, method, qtd){
-    var base = priceForMethod(p, method), f = faixaPara(p, qtd || 1);
-    if(!f || !Number(p.price)) return base;
-    return round2(base * (Number(f.preco) / Number(p.price)));
+  function extraDe(p, options){
+    var x = 0;
+    (p && p.options || []).forEach(function(g){ var c = options && options[g.name]; if(c && g.extras && Number(g.extras[c])) x += Number(g.extras[c]); });
+    return x;
+  }
+  function precoPorQtd(p, method, qtd, options){
+    var base = priceForMethod(p, method), f = faixaPara(p, qtd || 1), preco = Number(p.price) || 0;
+    var fator = preco ? base / preco : 1;
+    if(f && preco) fator = fator * (Number(f.preco) / preco);
+    return round2((preco + extraDe(p, options)) * fator);
   }
   function priceForMethod(p, method){
     if(method === "cartao"){
@@ -687,7 +694,7 @@
 
   function cartSubtotal(method){
     var total = 0;
-    cartLines().forEach(function(l){ total += precoPorQtd(l.product, method, qtdNoCarrinho(l.product.id)) * l.qty; });
+    cartLines().forEach(function(l){ total += precoPorQtd(l.product, method, qtdNoCarrinho(l.product.id), l.options) * l.qty; });
     return round2(total);
   }
 
@@ -1132,7 +1139,8 @@
       return '<div class="opt-group">' +
         '<span class="opt-group-label">'+escapeHtml(g.name)+'</span>' +
         '<div class="opt-choices">' + g.choices.map(function(c, ci){
-          return '<button type="button" class="opt-choice" data-group-idx="'+gi+'" data-choice-idx="'+ci+'" aria-pressed="'+(ci===0 ? "true" : "false")+'">'+escapeHtml(c)+'</button>';
+          var ex = g.extras && Number(g.extras[c]);
+          return '<button type="button" class="opt-choice" data-group-idx="'+gi+'" data-choice-idx="'+ci+'" aria-pressed="'+(ci===0 ? "true" : "false")+'">'+escapeHtml(c)+(ex ? ' <small class="opt-extra">'+(ex > 0 ? '+ ' : '− ')+fmtPrice(Math.abs(ex))+'</small>' : '')+'</button>';
         }).join("") + '</div>' +
       '</div>';
     }).join("") : "";
@@ -1160,7 +1168,7 @@
                 '<h1>'+escapeHtml(p.name)+'</h1>' +
                 (p.placeholder ? '<span class="card-example">produto de exemplo</span>' : '') +
                 (disc !== null ? '<div class="price-was-row" style="margin-block:8px 0;"><span class="price-was mono">'+fmtPrice(p.originalPrice)+'</span><span class="price-badge">'+disc+'%</span></div>' : '') +
-                '<div class="product-price-row"><span class="price-main mono">'+fmtPrice(p.price)+'</span><span style="color:var(--ink-faint);font-size:.85rem;">no Pix</span></div>' +
+                '<div class="product-price-row"><span class="price-main mono" id="pp-preco">'+fmtPrice(p.price + extraDe(p, selectedOptions))+'</span><span style="color:var(--ink-faint);font-size:.85rem;">no Pix</span></div>' +
                 (altPrice ? '<div class="price-alt mono">'+altPrice+'</div>' : '') +
                 tabelaAtacadoHtml(p) +
                 optionsHtml +
@@ -1199,6 +1207,10 @@
         Array.prototype.forEach.call(groupEl.querySelectorAll(".opt-choice"), function(b){
           b.setAttribute("aria-pressed", b===btn ? "true" : "false");
         });
+        var ppEl = document.getElementById("pp-preco");
+        if(ppEl) ppEl.textContent = fmtPrice(precoPorQtd(p, "pix", 1, selectedOptions));
+        var altEl = main.querySelector(".product-info .price-alt");
+        if(altEl){ var ex2 = extraDe(p, selectedOptions), p2 = Object.assign({}, p, { price: Number(p.price) + ex2, cardPrice: p.cardPrice != null && p.cardPrice !== "" ? round2(Number(p.cardPrice) * (Number(p.price) + ex2) / Number(p.price)) : null }); altEl.textContent = installmentLabelFull(p2); }
       });
     });
 
@@ -1310,7 +1322,7 @@
     var msg = "Pedido CristART 3D\n\n";
     lines.forEach(function(l){
       var optsText = optionsSummary(l.options);
-      var qp = qtdNoCarrinho(l.product.id), fx = faixaPara(l.product, qp), un = precoPorQtd(l.product, "pix", qp);
+      var qp = qtdNoCarrinho(l.product.id), fx = faixaPara(l.product, qp), un = precoPorQtd(l.product, "pix", qp, l.options);
       msg += l.qty + "x " + l.product.name + (optsText ? " ("+optsText+")" : "") + " - " + fmtPrice(un) + " cada = " + fmtPrice(un * l.qty) + (fx ? " (atacado " + fx.min + "+)" : "") + "\n";
     });
     payment = payment || { method:"pix" };
@@ -1339,7 +1351,7 @@
     return '<div class="atacado-tab"><div class="at-titulo">💰 Quanto mais, mais barato</div>' + linhas.map(function(l, i){
       var pct = i ? Math.round((1 - l.preco / Number(p.price)) * 100) : 0;
       return '<div class="at-linha'+(i ? ' at-desc' : '')+'"><span>'+(l.ate ? l.de+' a '+l.ate : l.de+' ou mais')+' un.</span><span><b class="mono">'+fmtPrice(l.preco)+'</b> cada'+(pct > 0 ? ' <em>−'+pct+'%</em>' : '')+'</span></div>';
-    }).join("") + '<div class="at-nota">No Pix. O desconto vale no carrinho automaticamente'+(p.options && p.options.length ? ', somando as opções que você escolher' : '')+'.</div></div>';
+    }).join("") + '<div class="at-nota">No Pix. O desconto vale no carrinho automaticamente'+(p.options && p.options.length ? ', somando as opções que você escolher' : '')+'.'+((p.options||[]).some(function(g){ return g.extras && Object.keys(g.extras).length; }) ? ' Opções com valor a mais têm o mesmo desconto.' : '')+'</div></div>';
   }
   function renderCartPage(){
     var main = document.getElementById("route-main");
@@ -1371,7 +1383,7 @@
       return (
         '<div class="cart-item" data-open="'+p.id+'">' +
           '<div class="thumb">'+img+'</div>' +
-          '<div class="info"><b>'+escapeHtml(p.name)+'</b>' + (optsText ? '<span style="display:block;color:var(--ink-faint);">'+escapeHtml(optsText)+'</span>' : '') + '<span>'+fmtPrice(precoPorQtd(p, "pix", qtdNoCarrinho(p.id)))+' cada (Pix)'+(faixaPara(p, qtdNoCarrinho(p.id)) ? ' <b class="at-tag">preço de atacado</b>' : '')+'</span>'+aviso+'</div>' +
+          '<div class="info"><b>'+escapeHtml(p.name)+'</b>' + (optsText ? '<span style="display:block;color:var(--ink-faint);">'+escapeHtml(optsText)+'</span>' : '') + '<span>'+fmtPrice(precoPorQtd(p, "pix", qtdNoCarrinho(p.id), l.options))+' cada (Pix)'+(faixaPara(p, qtdNoCarrinho(p.id)) ? ' <b class="at-tag">preço de atacado</b>' : '')+'</span>'+aviso+'</div>' +
           '<div class="qty-stepper" onclick="event.stopPropagation()">' +
             '<button type="button" data-qty-down="'+key+'">&minus;</button>' +
             '<span>'+l.qty+'</span>' +
